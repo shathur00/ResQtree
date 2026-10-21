@@ -1,0 +1,11 @@
+# Build output
+build/
+resqtree
+test_basic
+test_basic.d
+*.o
+*.d
+
+# Editor / OS noise
+.DS_Store
+*.swp

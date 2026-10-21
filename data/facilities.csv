@@ -1,0 +1,26 @@
+id,name,type,latitude,longitude
+1,City General Hospital,hospital,11.0168,76.9558
+2,Ampady Multi Speciality Hospital,hospital,11.0126,76.9487
+3,Medical Trust Hospital,hospital,11.0298,76.9351
+4,Little Flower Hospital,hospital,11.0246,77.0006
+5,Sree Krishna Hospital,hospital,11.0075,76.9601
+6,Chooyils Landing Hospital,hospital,10.9959,76.9673
+7,Red Cross Blood Bank,blood_bank,11.0183,76.9725
+8,Lifeline Blood Bank,blood_bank,11.0102,76.9444
+9,Community Blood Bank,blood_bank,11.0412,76.9583
+10,City Blood Centre,blood_bank,10.9887,76.9801
+11,Ambulance Depot Central,ambulance,11.0089,76.9532
+12,Ambulance Depot North,ambulance,11.0327,76.9664
+13,Ambulance Depot South,ambulance,10.9802,76.9471
+14,KSRTC Bus Stand,bus_stop,11.0065,76.9518
+15,Mofussil Bus Stand,bus_stop,11.0175,76.9702
+16,City Bus Stand Kaloor,bus_stop,10.9998,76.9614
+17,Model School Bus Stop,bus_stop,11.0251,76.9443
+18,Medical Store High Land,medical_shop,11.0132,76.9571
+19,City Medical Store,medical_shop,11.0095,76.9668
+20,Apollo Pharmacy,medical_shop,11.0198,76.9586
+21,24/7 Pharmacy MG Road,medical_shop,11.0044,76.9724
+22,District Pharmacy,medical_shop,11.0281,76.9548
+23,Police Station Circle,police_station,11.0128,76.9639
+24,Fire Station North,fire_station,11.0274,76.9517
+25,Fire Station South,fire_station,10.9913,76.9562
