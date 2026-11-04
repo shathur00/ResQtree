@@ -35,7 +35,7 @@ LIB_OBJS := $(filter-out $(OBJ_DIR)/main.o,$(OBJS))
 
 # The targets below are not real files, they are just names of recipes,
 # so tell make not to look for files with these names.
-.PHONY: all run test clean
+.PHONY: all run test clean bench
 
 # "make" with no arguments builds the main program.
 all: $(TARGET)
@@ -61,6 +61,10 @@ $(OBJ_DIR):
 # "make run" builds the program and then starts it.
 run: $(TARGET)
 	./$(TARGET)
+
+# "make bench" builds and runs the benchmark mode (no CSV needed).
+bench: $(TARGET)
+	./$(TARGET) --benchmark
 
 # "make test" builds the test program and runs it.
 # The test file has its own main(), so main.o is left out (LIB_OBJS) and

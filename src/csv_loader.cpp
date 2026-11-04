@@ -5,6 +5,8 @@
 #include "csv_loader.h"
 
 #include <fstream>
+#include <iostream>
+#include <set>
 #include <sstream>
 
 namespace csv_loader {
@@ -111,6 +113,7 @@ LoadResult load(const std::string& path) {
     std::string line;
     std::size_t lineNumber = 0;
     bool headerSeen = false;
+    std::set<int> seenIds;
 
     // Remember where the first malformed row was, so the caller can tell
     // the user which line of the file needs fixing.
@@ -176,6 +179,14 @@ LoadResult load(const std::string& path) {
             markSkipped();
             continue;
         }
+
+        if (seenIds.count(facility.id) != 0) {
+            std::cerr << "Warning: duplicate facility id " << facility.id
+                      << " at line " << lineNumber << " skipped.\n";
+            markSkipped();
+            continue;
+        }
+        seenIds.insert(facility.id);
 
         result.facilities.push_back(facility);
     }

@@ -1,153 +1,164 @@
-// kdtree.cpp
-//
-// Implementation of the 2D KD-Tree declared in kdtree.h.
-// Everything here is written from scratch for the course project.
-
 #include "kdtree.h"
 
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <stack>
+#include <utility>
+#include <vector>
 
 #include "haversine.h"
 
-// ---------------------------------------------------------------------------
-// Building
-// ---------------------------------------------------------------------------
+KDTree::~KDTree() {
+    if (!root_) return;
+    std::vector<Node*> toDelete;
+    toDelete.push_back(root_.release());
+    while (!toDelete.empty()) {
+        Node* n = toDelete.back();
+        toDelete.pop_back();
+        if (n->left) toDelete.push_back(n->left.release());
+        if (n->right) toDelete.push_back(n->right.release());
+        delete n;
+    }
+}
 
-// Build the subtree that owns the facilities in items[begin, end).
-//
-// The trick that makes this fast and balanced is std::nth_element:
-//   - It rearranges the range so that the element at position `mid` is
-//     the one that would be there if the range were fully sorted, and
-//     everything before it is <= it and everything after it is >= it.
-//   - It does that in O(n) time on average, instead of the O(n log n) a
-//     full sort would cost.
-//   - We then move the median element into the root of this subtree and
-//     build the left child from the left half and the right child from
-//     the right half. Because we always split in the middle, the tree
-//     ends up perfectly balanced: height O(log n).
-//
-// The range is passed by reference because nth_element reorders it.
 std::unique_ptr<KDTree::Node> KDTree::buildRange(std::vector<Facility>& items,
                                                   std::size_t begin, std::size_t end,
                                                   int depth) {
-    // An empty range has no root at all.
-    if (begin >= end) {
-        return nullptr;
-    }
-
-    // The axis for this level: depth 0 -> latitude, depth 1 -> longitude,
-    // depth 2 -> latitude again, and so on. This is the `depth % 2` rule.
+    if (begin >= end) return nullptr;
     const int axis = depth % 2;
-
-    // The median position. For a range of size n the median is at
-    // begin + n/2, which leaves the two halves the same size (or the
-    // left half one element bigger when n is even).
     const std::size_t mid = begin + (end - begin) / 2;
-
-    // Put the median element at `mid` and partition the rest around it.
     std::nth_element(items.begin() + static_cast<std::ptrdiff_t>(begin),
                      items.begin() + static_cast<std::ptrdiff_t>(mid),
                      items.begin() + static_cast<std::ptrdiff_t>(end),
                      [axis](const Facility& a, const Facility& b) {
                          return coordinate(a, axis) < coordinate(b, axis);
                      });
-
-    // Create the node for the median and take ownership of it.
     auto node = std::make_unique<Node>();
     node->facility = items[mid];
-
-    // Recurse on the two halves. `depth + 1` makes the next level use
-    // the other axis.
     node->left = buildRange(items, begin, mid, depth + 1);
     node->right = buildRange(items, mid + 1, end, depth + 1);
-
     return node;
 }
 
 void KDTree::build(std::vector<Facility> facilities) {
-    // Start from a clean slate: a second call to build() replaces the
-    // old tree completely rather than merging into it.
     root_.reset();
     count_ = 0;
-
-    // An empty data set simply means an empty tree.
-    if (facilities.empty()) {
-        return;
-    }
-
+    if (facilities.empty()) return;
     root_ = buildRange(facilities, 0, facilities.size(), 0);
     count_ = facilities.size();
 }
 
-// ---------------------------------------------------------------------------
-// Inserting
-// ---------------------------------------------------------------------------
-
-// Standard KD-Tree insert. We walk down from the root, comparing on the
-// axis that belongs to the current depth. A facility with a smaller
-// coordinate goes left, a facility with a larger-or-equal coordinate goes
-// right. When we reach an empty slot we hang the new node there.
-std::unique_ptr<KDTree::Node> KDTree::insertInto(std::unique_ptr<Node> node,
-                                                   const Facility& f, int depth) {
-    // Empty slot found - this is where the new facility belongs.
-    if (!node) {
-        auto fresh = std::make_unique<Node>();
-        fresh->facility = f;
-        ++count_;
-        return fresh;
-    }
-
-    const int axis = depth % 2;
-
-    if (coordinate(f, axis) < coordinate(node->facility, axis)) {
-        node->left = insertInto(std::move(node->left), f, depth + 1);
-    } else {
-        node->right = insertInto(std::move(node->right), f, depth + 1);
-    }
-
-    return node;
-}
-
 void KDTree::insert(const Facility& f) {
-    root_ = insertInto(std::move(root_), f, 0);
-}
-
-// ---------------------------------------------------------------------------
-// Nearest neighbour
-// ---------------------------------------------------------------------------
-
-// Recursive nearest-neighbour search.
-//
-// The idea in one sentence: visit the child that is on the same side of
-// the split as the query point FIRST (it is more likely to hold the
-// answer), and only visit the other child if the splitting line is
-// closer to the query point than the best answer we already have.
-void KDTree::nearestIn(const Node* node, double lat, double lon, int depth,
-                       NearestResult& best) const {
-    // Step 1: an empty branch - nothing to look at.
-    if (!node) {
+    if (!root_) {
+        root_ = std::make_unique<Node>();
+        root_->facility = f;
+        ++count_;
         return;
     }
+    Node* cur = root_.get();
+    int depth = 0;
+    while (true) {
+        const int axis = depth % 2;
+        if (coordinate(f, axis) < coordinate(cur->facility, axis)) {
+            if (!cur->left) {
+                cur->left = std::make_unique<Node>();
+                cur->left->facility = f;
+                ++count_;
+                return;
+            }
+            cur = cur->left.get();
+        } else {
+            if (!cur->right) {
+                cur->right = std::make_unique<Node>();
+                cur->right->facility = f;
+                ++count_;
+                return;
+            }
+            cur = cur->right.get();
+        }
+        ++depth;
+    }
+}
 
-    // Step 2: how far is this node from the query point?
-    const double distance = haversine::haversineKm(lat, lon,
-                                                    node->facility.lat,
-                                                    node->facility.lon);
+KDTree::Node* KDTree::findMin(Node* node, int axis, int depth) const {
+    if (!node) return nullptr;
+    Node* best = node;
+    const int nodeAxis = depth % 2;
+    if (nodeAxis == axis) {
+        Node* leftMin = findMin(node->left.get(), axis, depth + 1);
+        if (leftMin && coordinate(leftMin->facility, axis) < coordinate(best->facility, axis)) {
+            best = leftMin;
+        }
+        // right subtree holds >= values, cannot contain smaller
+    } else {
+        Node* leftMin = findMin(node->left.get(), axis, depth + 1);
+        Node* rightMin = findMin(node->right.get(), axis, depth + 1);
+        if (leftMin && coordinate(leftMin->facility, axis) < coordinate(best->facility, axis)) best = leftMin;
+        if (rightMin && coordinate(rightMin->facility, axis) < coordinate(best->facility, axis)) best = rightMin;
+    }
+    return best;
+}
 
-    // Step 3: keep it if it beats the best answer so far.
+bool KDTree::removeNode(std::unique_ptr<Node>& node, const Facility& f, int depth) {
+    if (!node) return false;
+    const int axis = depth % 2;
+
+    if (node->facility.id == f.id) {
+        if (node->right) {
+            Node* mn = findMin(node->right.get(), axis, depth + 1);
+            node->facility = mn->facility;
+            return removeNode(node->right, mn->facility, depth + 1);
+        } else if (node->left) {
+            Node* mn = findMin(node->left.get(), axis, depth + 1);
+            auto oldLeft = std::move(node->left);
+            node->right = std::move(oldLeft);
+            node->facility = mn->facility;
+            return removeNode(node->right, mn->facility, depth + 1);
+        } else {
+            node.reset();
+            return true;
+        }
+    }
+
+    const double targetCoord = coordinate(f, axis);
+    const double nodeCoord = coordinate(node->facility, axis);
+
+    bool found = false;
+    if (targetCoord < nodeCoord) {
+        found = removeNode(node->left, f, depth + 1);
+    } else if (targetCoord > nodeCoord) {
+        found = removeNode(node->right, f, depth + 1);
+    } else {
+        // Equal coordinate on this axis: ties may be on EITHER side, so
+        // the searched node can be in either child. Try left first, and
+        // if that failed try right.
+        if (removeNode(node->left, f, depth + 1)) found = true;
+        else found = removeNode(node->right, f, depth + 1);
+    }
+    return found;
+}
+
+bool KDTree::remove(const Facility& f) {
+    bool ok = removeNode(root_, f, 0);
+    if (ok) --count_;
+    return ok;
+}
+
+void KDTree::nearestIn(const Node* node, double lat, double lon, int depth,
+                       NearestResult& best, std::size_t* nv) const {
+    if (!node) return;
+    if (nv) ++(*nv);
+
+    const double distance = haversine::haversineKm(lat, lon, node->facility.lat, node->facility.lon);
     if (!best.has_value() || distance < best->second) {
         best = std::make_pair(node->facility, distance);
     }
 
-    // Step 4: work out which side of the split we are on.
     const int axis = depth % 2;
     const double queryCoord = (axis == 0) ? lat : lon;
     const double splitCoord = coordinate(node->facility, axis);
 
-    // "near" is the child on the same side of the split as the query
-    // point, "far" is the child on the other side.
     const Node* near = nullptr;
     const Node* far = nullptr;
     if (queryCoord < splitCoord) {
@@ -158,74 +169,177 @@ void KDTree::nearestIn(const Node* node, double lat, double lon, int depth,
         far = node->left.get();
     }
 
-    // Step 5: search the near child first. It holds the points that are
-    // on the query's side of the split, so it is the more promising one.
-    nearestIn(near, lat, lon, depth + 1, best);
+    nearestIn(near, lat, lon, depth + 1, best, nv);
 
-    // Step 6: THE PRUNING STEP.
-    //
-    // The far child contains only points on the other side of the
-    // splitting line. If we can prove that even the closest point of
-    // that branch is further away than the best answer we already have,
-    // then searching that branch cannot improve the result and we skip
-    // it. The proof uses a *lower bound*: a number that is guaranteed to
-    // be no larger than the real distance to anything in the branch.
-    //
-    //   lowerBound >= bestDistance  ==>  every point in the far child is
-    //   at least as far away as the best answer we already have, so
-    //   searching it cannot improve the result. We skip it.
-    //
-    //   lowerBound <  bestDistance  ==>  something in the far child might
-    //   be closer, so we go and look.
-    //
-    // Axis 0 (latitude): the branch holds latitudes on one side of
-    // splitCoord, so the distance to the parallel itself is the bound.
-    //
-    // Axis 1 (longitude): the branch holds a whole RANGE of longitudes,
-    // and the Earth is round, so the distance to the splitting meridian
-    // alone is NOT a safe bound (a branch near the antimeridian can hold
-    // longitudes that are circularly much closer than the meridian).
-    // lonFarBoundKm() therefore bounds the whole longitude range of the
-    // branch - see haversine.h for the details.
+    if (!far) return;
+    const bool farIsHigh = (queryCoord < splitCoord);
     double lowerBound = 0.0;
-    if (axis == 0) {
-        lowerBound = haversine::latLineDistKm(lat, splitCoord);
-    } else {
-        // The far child is on the high side when the query point is on
-        // the low side of the split, and vice versa.
-        const bool farIsHigh = (queryCoord < splitCoord);
-        lowerBound = haversine::lonFarBoundKm(lat, lon, splitCoord, farIsHigh);
-    }
+    if (axis == 0) lowerBound = haversine::latLineDistKm(lat, splitCoord);
+    else lowerBound = haversine::lonFarBoundKm(lat, lon, splitCoord, farIsHigh);
 
-    if (lowerBound < best->second) {
-        nearestIn(far, lat, lon, depth + 1, best);
+    if (!best.has_value() || lowerBound < best->second) {
+        nearestIn(far, lat, lon, depth + 1, best, nv);
     }
 }
 
-KDTree::NearestResult KDTree::nearest(double lat, double lon) const {
-    // An empty tree has no answer at all.
-    if (!root_) {
-        return std::nullopt;
-    }
-
+KDTree::NearestResult KDTree::nearest(double lat, double lon, std::size_t* nodesVisited) const {
+    if (nodesVisited) *nodesVisited = 0;
+    if (!root_) return std::nullopt;
     NearestResult best = std::nullopt;
-    nearestIn(root_.get(), lat, lon, 0, best);
+    nearestIn(root_.get(), lat, lon, 0, best, nodesVisited);
     return best;
 }
 
-// ---------------------------------------------------------------------------
-// Bookkeeping
-// ---------------------------------------------------------------------------
+void KDTree::kNearestIn(const Node* node, double lat, double lon, int depth, std::size_t k,
+                        std::priority_queue<KDHeapItem>& heap,
+                        std::size_t* nv) const {
+    if (!node) return;
+    if (nv) ++(*nv);
 
-std::size_t KDTree::size() const {
-    return count_;
+    const double distance = haversine::haversineKm(lat, lon, node->facility.lat, node->facility.lon);
+    if (heap.size() < k) {
+        heap.push({distance, node->facility});
+    } else if (!heap.empty() && distance < heap.top().dist) {
+        heap.pop();
+        heap.push({distance, node->facility});
+    }
+
+    const int axis = depth % 2;
+    const double queryCoord = (axis == 0) ? lat : lon;
+    const double splitCoord = coordinate(node->facility, axis);
+
+    const Node* near = nullptr;
+    const Node* far = nullptr;
+    if (queryCoord < splitCoord) {
+        near = node->left.get();
+        far = node->right.get();
+    } else {
+        near = node->right.get();
+        far = node->left.get();
+    }
+
+    kNearestIn(near, lat, lon, depth + 1, k, heap, nv);
+
+    if (!far) return;
+    const bool farIsHigh = (queryCoord < splitCoord);
+    double lowerBound = (axis == 0) ? haversine::latLineDistKm(lat, splitCoord)
+                                   : haversine::lonFarBoundKm(lat, lon, splitCoord, farIsHigh);
+
+    if (heap.size() < k || lowerBound <= heap.top().dist) {
+        kNearestIn(far, lat, lon, depth + 1, k, heap, nv);
+    }
 }
 
-bool KDTree::empty() const {
-    return count_ == 0;
+std::vector<std::pair<Facility, double>> KDTree::kNearest(double lat, double lon, std::size_t k,
+                                                           std::size_t* nodesVisited) const {
+    if (nodesVisited) *nodesVisited = 0;
+    if (k == 0 || !root_) return {};
+    std::priority_queue<KDHeapItem> heap;
+    kNearestIn(root_.get(), lat, lon, 0, k, heap, nodesVisited);
+    // sort ascending
+    std::vector<std::pair<Facility, double>> res;
+    res.reserve(heap.size());
+    while (!heap.empty()) {
+        auto top = heap.top(); heap.pop();
+        res.push_back({top.facility, top.dist});
+    }
+    std::sort(res.begin(), res.end(), [](const auto& a, const auto& b){ return a.second < b.second; });
+    return res;
 }
+
+void KDTree::radiusIn(const Node* node, double lat, double lon, double radiusKm, int depth,
+                      std::vector<std::pair<Facility, double>>& out, std::size_t* nv) const {
+    if (!node) return;
+    if (nv) ++(*nv);
+
+    const double distance = haversine::haversineKm(lat, lon, node->facility.lat, node->facility.lon);
+    if (distance <= radiusKm) {
+        out.push_back({node->facility, distance});
+    }
+
+    const int axis = depth % 2;
+    const double queryCoord = (axis == 0) ? lat : lon;
+    const double splitCoord = coordinate(node->facility, axis);
+
+    const Node* near = nullptr;
+    const Node* far = nullptr;
+    if (queryCoord < splitCoord) {
+        near = node->left.get();
+        far = node->right.get();
+    } else {
+        near = node->right.get();
+        far = node->left.get();
+    }
+
+    radiusIn(near, lat, lon, radiusKm, depth + 1, out, nv);
+
+    if (!far) return;
+    const bool farIsHigh = (queryCoord < splitCoord);
+    double lowerBound = (axis == 0) ? haversine::latLineDistKm(lat, splitCoord)
+                                   : haversine::lonFarBoundKm(lat, lon, splitCoord, farIsHigh);
+    if (lowerBound <= radiusKm) {
+        radiusIn(far, lat, lon, radiusKm, depth + 1, out, nv);
+    }
+}
+
+std::vector<std::pair<Facility, double>> KDTree::radiusSearch(double lat, double lon, double radiusKm,
+                                                              std::size_t* nodesVisited) const {
+    if (nodesVisited) *nodesVisited = 0;
+    if (radiusKm < 0 || !root_) return {};
+    std::vector<std::pair<Facility, double>> out;
+    radiusIn(root_.get(), lat, lon, radiusKm, 0, out, nodesVisited);
+    std::sort(out.begin(), out.end(), [](const auto& a, const auto& b){ return a.second < b.second; });
+    return out;
+}
+
+std::size_t KDTree::size() const { return count_; }
+bool KDTree::empty() const { return count_ == 0; }
 
 void KDTree::clear() {
-    root_.reset();
+    // iterative delete
+    if (root_) {
+        std::vector<Node*> toDelete;
+        toDelete.push_back(root_.release());
+        while (!toDelete.empty()) {
+            Node* n = toDelete.back(); toDelete.pop_back();
+            if (n->left) toDelete.push_back(n->left.release());
+            if (n->right) toDelete.push_back(n->right.release());
+            delete n;
+        }
+    }
     count_ = 0;
+}
+
+int KDTree::height() const {
+    if (!root_) return 0;
+    int h = 0;
+    std::stack<std::pair<Node*, int>> st;
+    st.push({root_.get(), 1});
+    while (!st.empty()) {
+        auto [n, d] = st.top(); st.pop();
+        h = std::max(h, d);
+        if (n->left) st.push({n->left.get(), d + 1});
+        if (n->right) st.push({n->right.get(), d + 1});
+    }
+    return h;
+}
+
+std::vector<Facility> KDTree::toVector() const {
+    std::vector<Facility> out;
+    if (!root_) return out;
+    std::stack<Node*> st;
+    st.push(root_.get());
+    while (!st.empty()) {
+        Node* n = st.top(); st.pop();
+        out.push_back(n->facility);
+        if (n->left) st.push(n->left.get());
+        if (n->right) st.push(n->right.get());
+    }
+    return out;
+}
+
+void KDTree::rebuild() {
+    auto v = toVector();
+    clear();
+    build(std::move(v));
 }
