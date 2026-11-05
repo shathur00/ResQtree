@@ -1,2 +1,0 @@
-CPU: unknown CPU
-Compiler: Apple LLVM 21.0.0 (clang-2100.3.34.2)

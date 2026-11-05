@@ -146,9 +146,8 @@ bool KDTree::remove(const Facility& f) {
 }
 
 void KDTree::nearestIn(const Node* node, double lat, double lon, int depth,
-                       NearestResult& best, std::size_t* nv) const {
+                       NearestResult& best) const {
     if (!node) return;
-    if (nv) ++(*nv);
 
     const double distance = haversine::haversineKm(lat, lon, node->facility.lat, node->facility.lon);
     if (!best.has_value() || distance < best->second) {
@@ -169,7 +168,7 @@ void KDTree::nearestIn(const Node* node, double lat, double lon, int depth,
         far = node->left.get();
     }
 
-    nearestIn(near, lat, lon, depth + 1, best, nv);
+    nearestIn(near, lat, lon, depth + 1, best);
 
     if (!far) return;
     const bool farIsHigh = (queryCoord < splitCoord);
@@ -178,23 +177,20 @@ void KDTree::nearestIn(const Node* node, double lat, double lon, int depth,
     else lowerBound = haversine::lonFarBoundKm(lat, lon, splitCoord, farIsHigh);
 
     if (!best.has_value() || lowerBound < best->second) {
-        nearestIn(far, lat, lon, depth + 1, best, nv);
+        nearestIn(far, lat, lon, depth + 1, best);
     }
 }
 
-KDTree::NearestResult KDTree::nearest(double lat, double lon, std::size_t* nodesVisited) const {
-    if (nodesVisited) *nodesVisited = 0;
+KDTree::NearestResult KDTree::nearest(double lat, double lon) const {
     if (!root_) return std::nullopt;
     NearestResult best = std::nullopt;
-    nearestIn(root_.get(), lat, lon, 0, best, nodesVisited);
+    nearestIn(root_.get(), lat, lon, 0, best);
     return best;
 }
 
 void KDTree::kNearestIn(const Node* node, double lat, double lon, int depth, std::size_t k,
-                        std::priority_queue<KDHeapItem>& heap,
-                        std::size_t* nv) const {
+                        std::priority_queue<KDHeapItem>& heap) const {
     if (!node) return;
-    if (nv) ++(*nv);
 
     const double distance = haversine::haversineKm(lat, lon, node->facility.lat, node->facility.lon);
     if (heap.size() < k) {
@@ -218,7 +214,7 @@ void KDTree::kNearestIn(const Node* node, double lat, double lon, int depth, std
         far = node->left.get();
     }
 
-    kNearestIn(near, lat, lon, depth + 1, k, heap, nv);
+    kNearestIn(near, lat, lon, depth + 1, k, heap);
 
     if (!far) return;
     const bool farIsHigh = (queryCoord < splitCoord);
@@ -226,16 +222,14 @@ void KDTree::kNearestIn(const Node* node, double lat, double lon, int depth, std
                                    : haversine::lonFarBoundKm(lat, lon, splitCoord, farIsHigh);
 
     if (heap.size() < k || lowerBound <= heap.top().dist) {
-        kNearestIn(far, lat, lon, depth + 1, k, heap, nv);
+        kNearestIn(far, lat, lon, depth + 1, k, heap);
     }
 }
 
-std::vector<std::pair<Facility, double>> KDTree::kNearest(double lat, double lon, std::size_t k,
-                                                           std::size_t* nodesVisited) const {
-    if (nodesVisited) *nodesVisited = 0;
+std::vector<std::pair<Facility, double>> KDTree::kNearest(double lat, double lon, std::size_t k) const {
     if (k == 0 || !root_) return {};
     std::priority_queue<KDHeapItem> heap;
-    kNearestIn(root_.get(), lat, lon, 0, k, heap, nodesVisited);
+    kNearestIn(root_.get(), lat, lon, 0, k, heap);
     // sort ascending
     std::vector<std::pair<Facility, double>> res;
     res.reserve(heap.size());
@@ -248,9 +242,8 @@ std::vector<std::pair<Facility, double>> KDTree::kNearest(double lat, double lon
 }
 
 void KDTree::radiusIn(const Node* node, double lat, double lon, double radiusKm, int depth,
-                      std::vector<std::pair<Facility, double>>& out, std::size_t* nv) const {
+                      std::vector<std::pair<Facility, double>>& out) const {
     if (!node) return;
-    if (nv) ++(*nv);
 
     const double distance = haversine::haversineKm(lat, lon, node->facility.lat, node->facility.lon);
     if (distance <= radiusKm) {
@@ -271,23 +264,21 @@ void KDTree::radiusIn(const Node* node, double lat, double lon, double radiusKm,
         far = node->left.get();
     }
 
-    radiusIn(near, lat, lon, radiusKm, depth + 1, out, nv);
+    radiusIn(near, lat, lon, radiusKm, depth + 1, out);
 
     if (!far) return;
     const bool farIsHigh = (queryCoord < splitCoord);
     double lowerBound = (axis == 0) ? haversine::latLineDistKm(lat, splitCoord)
                                    : haversine::lonFarBoundKm(lat, lon, splitCoord, farIsHigh);
     if (lowerBound <= radiusKm) {
-        radiusIn(far, lat, lon, radiusKm, depth + 1, out, nv);
+        radiusIn(far, lat, lon, radiusKm, depth + 1, out);
     }
 }
 
-std::vector<std::pair<Facility, double>> KDTree::radiusSearch(double lat, double lon, double radiusKm,
-                                                              std::size_t* nodesVisited) const {
-    if (nodesVisited) *nodesVisited = 0;
+std::vector<std::pair<Facility, double>> KDTree::radiusSearch(double lat, double lon, double radiusKm) const {
     if (radiusKm < 0 || !root_) return {};
     std::vector<std::pair<Facility, double>> out;
-    radiusIn(root_.get(), lat, lon, radiusKm, 0, out, nodesVisited);
+    radiusIn(root_.get(), lat, lon, radiusKm, 0, out);
     std::sort(out.begin(), out.end(), [](const auto& a, const auto& b){ return a.second < b.second; });
     return out;
 }

@@ -42,11 +42,9 @@ public:
     void insert(const Facility& f);
     bool remove(const Facility& f);
 
-    NearestResult nearest(double lat, double lon, std::size_t* nodesVisited = nullptr) const;
-    std::vector<std::pair<Facility, double>> kNearest(double lat, double lon, std::size_t k,
-                                                      std::size_t* nodesVisited = nullptr) const;
-    std::vector<std::pair<Facility, double>> radiusSearch(double lat, double lon, double radiusKm,
-                                                          std::size_t* nodesVisited = nullptr) const;
+    NearestResult nearest(double lat, double lon) const;
+    std::vector<std::pair<Facility, double>> kNearest(double lat, double lon, std::size_t k) const;
+    std::vector<std::pair<Facility, double>> radiusSearch(double lat, double lon, double radiusKm) const;
 
     std::size_t size() const;
     bool empty() const;
@@ -70,12 +68,11 @@ private:
     Node* findMin(Node* node, int axis, int depth) const;
 
     void nearestIn(const Node* node, double lat, double lon, int depth,
-                   NearestResult& best, std::size_t* nv) const;
+                   NearestResult& best) const;
     void kNearestIn(const Node* node, double lat, double lon, int depth, std::size_t k,
-                    std::priority_queue<KDHeapItem>& heap,
-                    std::size_t* nv) const;
+                    std::priority_queue<KDHeapItem>& heap) const;
     void radiusIn(const Node* node, double lat, double lon, double radiusKm, int depth,
-                  std::vector<std::pair<Facility, double>>& out, std::size_t* nv) const;
+                  std::vector<std::pair<Facility, double>>& out) const;
 
     bool removeNode(std::unique_ptr<Node>& node, const Facility& f, int depth);
 

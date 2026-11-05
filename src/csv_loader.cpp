@@ -150,7 +150,7 @@ LoadResult load(const std::string& path) {
         }
 
         // We need at least id, name, type, latitude, longitude.
-        if (fields.size() < 5) {
+        if (fields.size() != 5) {
             markSkipped();
             continue;
         }

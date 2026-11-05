@@ -27,29 +27,21 @@ public:
     bool remove(int id);
     std::optional<Facility> findById(int id) const;
 
-    NearestResult nearestInType(const std::string& type, double lat, double lon,
-                               std::size_t* nodesVisited = nullptr) const;
-    NearestResult nearestOverall(double lat, double lon, std::size_t* nodesVisited = nullptr) const;
-    NearestResult nearestInTypes(const std::vector<std::string>& types, double lat, double lon,
-                                std::size_t* nodesVisited = nullptr) const;
+    NearestResult nearestInType(const std::string& type, double lat, double lon) const;
+    NearestResult nearestOverall(double lat, double lon) const;
+    NearestResult nearestInTypes(const std::vector<std::string>& types, double lat, double lon) const;
 
     std::vector<std::pair<Facility, double>> kNearestInType(const std::string& type,
-                                                          double lat, double lon, std::size_t k,
-                                                          std::size_t* nodesVisited = nullptr) const;
-    std::vector<std::pair<Facility, double>> kNearestOverall(double lat, double lon, std::size_t k,
-                                                             std::size_t* nodesVisited = nullptr) const;
+                                                          double lat, double lon, std::size_t k) const;
+    std::vector<std::pair<Facility, double>> kNearestOverall(double lat, double lon, std::size_t k) const;
     std::vector<std::pair<Facility, double>> kNearestInTypes(const std::vector<std::string>& types,
-                                                             double lat, double lon, std::size_t k,
-                                                             std::size_t* nodesVisited = nullptr) const;
+                                                             double lat, double lon, std::size_t k) const;
 
     std::vector<std::pair<Facility, double>> radiusInType(const std::string& type,
-                                                          double lat, double lon, double radiusKm,
-                                                          std::size_t* nodesVisited = nullptr) const;
-    std::vector<std::pair<Facility, double>> radiusOverall(double lat, double lon, double radiusKm,
-                                                           std::size_t* nodesVisited = nullptr) const;
+                                                          double lat, double lon, double radiusKm) const;
+    std::vector<std::pair<Facility, double>> radiusOverall(double lat, double lon, double radiusKm) const;
     std::vector<std::pair<Facility, double>> radiusInTypes(const std::vector<std::string>& types,
-                                                           double lat, double lon, double radiusKm,
-                                                           std::size_t* nodesVisited = nullptr) const;
+                                                           double lat, double lon, double radiusKm) const;
 
     std::vector<std::string> types() const;
     std::vector<TypeStat> typeStats() const;
